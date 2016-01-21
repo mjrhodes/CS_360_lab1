@@ -133,7 +133,7 @@ void GetHeaderLines(vector<char *> &headerLines, int skt, bool envformat)
             else
             {
                 line = (char *)malloc((strlen(tline) + 10) * sizeof(char));
-                sprintf(line, "HTTP_%s", tline);                
+                sprintf(line, "%s", tline);                
             }
         }
         //fprintf(stderr, "Header --> [%s]\n", line);
@@ -145,7 +145,7 @@ void GetHeaderLines(vector<char *> &headerLines, int skt, bool envformat)
     free(tline);
 }
 
-void  download(int argc, char* argv[], bool debug)
+void  download(int argc, char* argv[], bool debug, bool count, int &successes)
 {
     int hSocket;                 /* handle to socket */
     struct hostent* pHostInfo;   /* holds info about a machine */
@@ -158,16 +158,24 @@ void  download(int argc, char* argv[], bool debug)
 
     if(argc < 3)
       {
-        printf("\nUsage: client host-name host-port\n");
+        printf("\nUsage: download [-rc] host-name host-port url\n");
         exit(0);
       }
     else
       {
-        strcpy(strHostName,argv[1]);
-        nHostPort=atoi(argv[2]);
+      	if(argc > 5) {
+			strcpy(strHostName,argv[3]);
+			nHostPort=atoi(argv[4]);
+      	}
+      	else if(argc > 4) {
+			strcpy(strHostName,argv[2]);
+			nHostPort=atoi(argv[3]);
+        } else {
+        	strcpy(strHostName,argv[1]);
+			nHostPort=atoi(argv[2]);
+		}
       }
 
-    printf("\nMaking a socket");
     /* make a socket */
     hSocket=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
 
@@ -187,8 +195,6 @@ void  download(int argc, char* argv[], bool debug)
     Address.sin_port=htons(nHostPort);
     Address.sin_family=AF_INET;
 
-    printf("\nConnecting to %s (%X) on port %d\n",strHostName,(unsigned int)nHostAddress,nHostPort);
-
     /* connect to host */
     int connectValue = connect(hSocket,(struct sockaddr*)&Address,sizeof(Address));
     if(connectValue == SOCKET_ERROR)
@@ -198,15 +204,18 @@ void  download(int argc, char* argv[], bool debug)
     }
     
     char *message = (char *)malloc(MAX_MSG_SZ);
-    sprintf(message, "GET %s HTTP/1.1\r\nHOST:%s:%s\r\n\r\n",argv[3],argv[1],argv[2]);
-    printf("\n");
+    if(argc > 5) {
+    	sprintf(message, "GET %s HTTP/1.1\r\nHOST:%s:%s\r\n\r\n",argv[5],argv[3],argv[4]);
+    } else if(argc > 4) {
+    	sprintf(message, "GET %s HTTP/1.1\r\nHOST:%s:%s\r\n\r\n",argv[4],argv[2],argv[3]);
+    } else {
+		sprintf(message, "GET %s HTTP/1.1\r\nHOST:%s:%s\r\n\r\n",argv[3],argv[1],argv[2]);
+    }
+    if(!count) {
+    	printf("\n");
+    }
     write(hSocket,message,strlen(message));
     memset(pBuffer, 0, BUFFER_SIZE);
-    
-    // nReadAmount=read(hSocket,pBuffer,BUFFER_SIZE);
-//     while(nReadAmount > 0) {
-//     	nReadAmount=read(hSocket,pBuffer,BUFFER_SIZE);
-//     }
 	
 	vector<char *> headerLines;
 	char buffer[MAX_MSG_SZ];
@@ -214,12 +223,16 @@ void  download(int argc, char* argv[], bool debug)
 	
 	// First read the status line
 	char *startline = GetLine(hSocket);
+	string code = startline;
+	if(code == "HTTP/1.1 200 OK") {
+		successes++;
+	}
 
 	// Read the header lines
 	GetHeaderLines(headerLines, hSocket , false);
 
 	// Now print them out
-	if(debug) {
+	if(debug && !count) {
 		printf("%s\n",startline);
 		for (int i = 0; i < headerLines.size(); i++) {
 			printf("%s\n",headerLines[i]);
@@ -230,17 +243,13 @@ void  download(int argc, char* argv[], bool debug)
 		printf("\n\n");
 	}
 
-// 	printf("\n=======================\n");
-// 	printf("Headers are finished, now read the file\n");
-// 	printf("Content Type is %s\n",contentType);
-// 	printf("=======================\n\n");
-
 	// Now read and print the rest of the file
-	int rval;
-	while((rval = read(hSocket,buffer,MAX_MSG_SZ)) > 0) {
-		write(1,buffer,rval);
+	if(!count) {
+		int rval;
+		while((rval = read(hSocket,buffer,MAX_MSG_SZ)) > 0) {
+			write(1,buffer,rval);
+		}
 	}
-   
    
     /* close socket */                       
     if(close(hSocket) == SOCKET_ERROR)
@@ -253,6 +262,40 @@ void  download(int argc, char* argv[], bool debug)
 
 int  main(int argc, char* argv[])
 {
-	download(argc, argv, false);
+	int c;
+	bool debug = false;
+	bool count = false;
+	int countValue = 1;
+	int successes = 0;
+	
+	while ((c = getopt (argc, argv, "dc:")) != -1) {
+		switch (c) {
+			case 'd':
+			debug = true;
+			break;
+			case 'c':
+			count = true;
+			countValue = atoi(optarg);
+			break;
+			case '?':
+			if (optopt == 'c')
+          		fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+        	else if (isprint (optopt))
+				fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+			else
+				fprintf (stderr,
+					   "Unknown option character `\\x%x'.\n",
+					   optopt);
+				return 1;
+			default:
+				abort ();
+		}
+	}
+	for(int i = 0; i < countValue; i++) {
+		download(argc, argv, debug, count, successes);
+	}
+	if(count) {
+		printf("Succeeded %d times\n", successes);
+	}
 	return 0;
 }
