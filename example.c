@@ -42,6 +42,7 @@ int  main(int argc, char* argv[])
         printf("\nCould not make a socket\n");
         return 0;
     }
+    printf("\nSocket made");
 
     /* get IP address from name */
     pHostInfo=gethostbyname(strHostName);
@@ -63,20 +64,20 @@ int  main(int argc, char* argv[])
         return 0;
     }
 
-    /* read from socket into buffer
-    ** number returned by read() and write() is the number of bytes
-    ** read or written, with -1 being that an error occured */
+#define MAXMSG 1024
+    char *message = (char *)malloc(MAXMSG);
+    sprintf(message, "GET %s HTTP/1.1\r\nHOST:%s:%s\r\n\r\n",argv[3],argv[1],argv[2]);
+    printf("Message:\n%s\n", message);
+    write(hSocket,message,strlen(message));
+    memset(pBuffer, 0, BUFFER_SIZE);
     nReadAmount=read(hSocket,pBuffer,BUFFER_SIZE);
-    printf("\nReceived \"%s\" from server\n",pBuffer);
-    /* write what we received back to the server */
-//     write(hSocket,pBuffer,nReadAmount);
-    printf("\nWriting \"%s\" to server",pBuffer);
-
-    printf("\nClosing socket\n");
+    printf("Response %s",pBuffer);
+   
     /* close socket */                       
     if(close(hSocket) == SOCKET_ERROR)
     {
         printf("\nCould not close socket\n");
         return 0;
     }
+    free(message);
 }
